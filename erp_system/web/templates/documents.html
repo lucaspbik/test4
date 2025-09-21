@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Fertigungsunterlagen{% endblock %}
+
+{% block content %}
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <h2>Fertigungsunterlagen für {{ order.reference }}</h2>
+    <p>
+      Kunde: {{ customer.name if customer else 'Unbekannter Kunde' }}<br />
+      Fälligkeit: {{ order.due_date.strftime('%d.%m.%Y') }}<br />
+      Priorität: {{ order.priority.label }}<br />
+      Status: {{ order.status.value }}
+    </p>
+    <a href="/planning">Zurück zur Feinplanung</a>
+  </div>
+
+  {% for instruction in instructions %}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <h3>{{ instruction.sequence }}. {{ instruction.operation_name }}</h3>
+      <p class="muted">
+        Prozess: {{ instruction.process.value }}
+        {% if instruction.machine_name %}
+          &middot; Maschine: {{ instruction.machine_name }}
+        {% elif instruction.machine_id %}
+          &middot; Maschine: {{ machines[instruction.machine_id].name if instruction.machine_id in machines else instruction.machine_id }}
+        {% endif %}
+      </p>
+      {% if instruction.instructions %}
+        <h4>Arbeitsanweisungen</h4>
+        <ul>
+          {% for step in instruction.instructions %}
+            <li>{{ step }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if instruction.checklist %}
+        <h4>Checkliste</h4>
+        <ul>
+          {% for item in instruction.checklist %}
+            <li>
+              {% if not item.mandatory %}<span class="muted">(optional)</span> {% endif %}
+              {{ item.description }}
+              {% if item.reference %}<span class="muted">&ndash; {{ item.reference }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="card">
+      <p class="muted">Es konnten keine Arbeitsunterlagen generiert werden. Planen Sie den Auftrag, um Operationen zuzuordnen.</p>
+    </div>
+  {% endfor %}
+{% endblock %}

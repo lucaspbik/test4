@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Simulation{% endblock %}
+
+{% block content %}
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <h2>Planungsszenarien simulieren</h2>
+    <p class="muted">
+      Vergleichen Sie alternative Einstellungen für Prioritäten, Horizonte und Startzeiten.
+      Für jedes Szenario können Sie optionale Abweichungen vom globalen Parameter-Set festlegen
+      sowie Startdatum und Laufhorizont der Simulation bestimmen.
+    </p>
+  </div>
+
+  <form method="post" action="/simulation/run">
+    <div class="grid">
+      {% for index in range(1, 4) %}
+        {% set scenario = scenario_inputs[index-1] if scenario_inputs and scenario_inputs|length >= index else None %}
+        <div class="card">
+          <h3>Szenario {{ index }}</h3>
+          <div class="form-grid">
+            <div>
+              <label for="scenario{{ index }}_name">Name</label>
+              <input id="scenario{{ index }}_name" name="scenario{{ index }}_name" value="{{ scenario.name if scenario else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_description">Beschreibung</label>
+              <input id="scenario{{ index }}_description" name="scenario{{ index }}_description" value="{{ scenario.description if scenario else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_priority_weight">Gewichtung Priorität</label>
+              <input id="scenario{{ index }}_priority_weight" name="scenario{{ index }}_priority_weight" type="number" step="0.1" min="0" value="{{ '%.2f'|format(scenario.priority_weight) if scenario and scenario.priority_weight is not none else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_due_date_weight">Gewichtung Fälligkeit</label>
+              <input id="scenario{{ index }}_due_date_weight" name="scenario{{ index }}_due_date_weight" type="number" step="0.1" min="0" value="{{ '%.2f'|format(scenario.due_date_weight) if scenario and scenario.due_date_weight is not none else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_horizon">Horizont (Tage)</label>
+              <input id="scenario{{ index }}_horizon" name="scenario{{ index }}_horizon" type="number" min="0" value="{{ scenario.horizon_days if scenario and scenario.horizon_days is not none else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_max_orders">Max. Aufträge</label>
+              <input id="scenario{{ index }}_max_orders" name="scenario{{ index }}_max_orders" type="number" min="0" value="{{ scenario.max_orders_per_cycle if scenario and scenario.max_orders_per_cycle is not none else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_setup_factor">Rüstzeitfaktor</label>
+              <input id="scenario{{ index }}_setup_factor" name="scenario{{ index }}_setup_factor" type="number" step="0.05" min="0" value="{{ '%.2f'|format(scenario.setup_time_factor) if scenario and scenario.setup_time_factor is not none else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_gap_minutes">Puffer (Minuten)</label>
+              <input id="scenario{{ index }}_gap_minutes" name="scenario{{ index }}_gap_minutes" type="number" min="0" value="{{ scenario.gap_between_operations_minutes if scenario and scenario.gap_between_operations_minutes is not none else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_default_start">Schichtbeginn</label>
+              <input id="scenario{{ index }}_default_start" name="scenario{{ index }}_default_start" type="time" value="{{ scenario.default_start_time.strftime('%H:%M') if scenario and scenario.default_start_time else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_auto_release">Freigabe</label>
+              <select id="scenario{{ index }}_auto_release" name="scenario{{ index }}_auto_release">
+                {% set auto_val = 'inherit' %}
+                {% if scenario and scenario.auto_release_orders is not none %}
+                  {% set auto_val = 'true' if scenario.auto_release_orders else 'false' %}
+                {% endif %}
+                <option value="inherit" {% if auto_val == 'inherit' %}selected{% endif %}>Global</option>
+                <option value="true" {% if auto_val == 'true' %}selected{% endif %}>Aktiv</option>
+                <option value="false" {% if auto_val == 'false' %}selected{% endif %}>Deaktiv</option>
+              </select>
+            </div>
+            <div>
+              <label for="scenario{{ index }}_start_date">Startdatum</label>
+              <input id="scenario{{ index }}_start_date" name="scenario{{ index }}_start_date" type="date" value="{{ scenario.start_reference.strftime('%Y-%m-%d') if scenario and scenario.start_reference else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_start_time">Startzeit</label>
+              <input id="scenario{{ index }}_start_time" name="scenario{{ index }}_start_time" type="time" value="{{ scenario.start_reference.strftime('%H:%M') if scenario and scenario.start_reference else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_run_horizon">Lauf-Horizont (Tage)</label>
+              <input id="scenario{{ index }}_run_horizon" name="scenario{{ index }}_run_horizon" type="number" min="0" value="{{ scenario.run_horizon_days if scenario and scenario.run_horizon_days is not none else '' }}" />
+            </div>
+            <div>
+              <label for="scenario{{ index }}_run_max_orders">Lauf-Auftragslimit</label>
+              <input id="scenario{{ index }}_run_max_orders" name="scenario{{ index }}_run_max_orders" type="number" min="0" value="{{ scenario.run_max_orders if scenario and scenario.run_max_orders is not none else '' }}" />
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <div style="margin-top: 1rem;">
+      <button type="submit">Simulation starten</button>
+    </div>
+  </form>
+
+  {% if results %}
+    <div class="card" style="margin-top: 2rem;">
+      <h2>Simulationsergebnisse</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Szenario</th>
+            <th>Aufträge</th>
+            <th>Operationen</th>
+            <th>Überlastete Maschinen</th>
+            <th>Letzte Fertigstellung</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for result in results %}
+            {% set last_finish = result.completion_times.values() | max if result.completion_times else None %}
+            <tr>
+              <td>{{ result.scenario.name }}</td>
+              <td>{{ result.scheduled_orders }}</td>
+              <td>{{ result.total_operations }}</td>
+              <td>{{ result.overloaded_machines|length }}</td>
+              <td>{% if last_finish %}{{ last_finish.strftime('%d.%m.%Y %H:%M') }}{% else %}<span class="muted">keine Planung</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid" style="margin-top: 1.5rem;">
+      {% for result in results %}
+        <div class="card">
+          <h3>{{ result.scenario.name }}</h3>
+          <p class="muted">Berechnete Parameter basieren auf dem aktuellen Satz und den Szenario-Overrides.</p>
+          <h4>Maschinenlast</h4>
+          <ul>
+            {% for machine_id, load in result.machine_loads.items() %}
+              {% set machine_name = machine_lookup.get(machine_id) if machine_lookup else None %}
+              <li>
+                {% if machine_name %}
+                  {{ machine_name }} <span class="muted">({{ machine_id }})</span>
+                {% else %}
+                  {{ machine_id }}
+                {% endif %}: {{ '%.2f'|format(load) }} h
+                {% if machine_id in result.overloaded_machines %}
+                  <span class="muted">(Überlast {{ '%.2f'|format(result.overloaded_machines[machine_id]) }} h)</span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+          {% if result.completion_times %}
+            <h4>Fertigstellung</h4>
+            <ul>
+              {% for order_id, finish in result.completion_times.items() %}
+                <li>{{ order_id }} &ndash; {{ finish.strftime('%d.%m.%Y %H:%M') }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}

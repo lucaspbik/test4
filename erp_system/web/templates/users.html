@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Benutzerverwaltung{% endblock %}
+
+{% block content %}
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <h2>Benutzer anlegen</h2>
+    <form method="post" action="/users">
+      <div class="form-grid">
+        <div>
+          <label for="user_username">Benutzername</label>
+          <input id="user_username" name="username" required />
+        </div>
+        <div>
+          <label for="user_full_name">Name</label>
+          <input id="user_full_name" name="full_name" />
+        </div>
+        <div>
+          <label for="user_email">E-Mail</label>
+          <input id="user_email" name="email" type="email" />
+        </div>
+        <div>
+          <label>Rollen</label>
+          <div>
+            {% for role in roles %}
+              <label class="checkbox-inline" style="margin-bottom: 0.3rem;">
+                <input type="checkbox" name="roles" value="{{ role.value }}" />
+                <span>{{ role.label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <label class="checkbox-inline" style="margin-top: 1.6rem;">
+            <input type="checkbox" name="is_active" checked />
+            <span>Aktiv</span>
+          </label>
+        </div>
+      </div>
+      <div style="margin-top: 1rem;">
+        <button type="submit">Benutzer erstellen</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Bestehende Benutzer</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>E-Mail</th>
+          <th>Rollen</th>
+          <th>Letzte Anmeldung</th>
+          <th>Status</th>
+          <th>Aktionen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+          <tr>
+            <td><strong>{{ user.full_name or user.username }}</strong><br /><span class="muted">{{ user.username }}</span></td>
+            <td>{{ user.email }}</td>
+            <td>
+              <form method="post" action="/users/{{ user.id }}/roles">
+                {% for role in roles %}
+                  <label class="checkbox-inline" style="margin-bottom: 0.25rem;">
+                    <input type="checkbox" name="roles" value="{{ role.value }}" {% if role in user.roles %}checked{% endif %} />
+                    <span>{{ role.label }}</span>
+                  </label>
+                {% endfor %}
+                <div style="margin-top: 0.5rem;">
+                  <button type="submit" class="secondary">Rollen aktualisieren</button>
+                </div>
+              </form>
+            </td>
+            <td>
+              {% if user.last_login %}
+                {{ user.last_login.strftime('%d.%m.%Y %H:%M') }}
+              {% else %}
+                <span class="muted">noch nicht angemeldet</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if user.is_active %}
+                <span class="status-badge status-RELEASED">Aktiv</span>
+              {% else %}
+                <span class="status-badge status-PLANNED">Inaktiv</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" action="/users/{{ user.id }}/status" class="inline">
+                {% if user.is_active %}
+                  <input type="hidden" name="state" value="inactive" />
+                  <button type="submit" class="secondary">Deaktivieren</button>
+                {% else %}
+                  <input type="hidden" name="state" value="active" />
+                  <button type="submit">Aktivieren</button>
+                {% endif %}
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="6" class="muted">Noch keine Benutzer vorhanden.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
