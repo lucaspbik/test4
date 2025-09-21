@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Einkauf{% endblock %}
+
+{% block content %}
+  {% if planned_count or created_count %}
+    <div class="alert success">
+      <strong>Beschaffung berechnet.</strong>
+      {% if planned_count %} {{ planned_count }} Vorschlag{% if planned_count != 1 %}e{% endif %} erstellt.{% endif %}
+      {% if created_count %} {{ created_count }} Bestellung{% if created_count != 1 %}en{% endif %} direkt angelegt.{% endif %}
+    </div>
+  {% elif options_updated %}
+    <div class="alert">
+      Beschaffungsparameter wurden gespeichert.
+    </div>
+  {% endif %}
+
+  <div class="grid" style="margin-bottom: 2rem;">
+    <div class="card">
+      <h2>Beschaffungsparameter</h2>
+      <form method="post" action="/procurement/options">
+        <div class="form-grid">
+          <div>
+            <label for="reorder_multiplier">Bestellmultiplikator</label>
+            <input id="reorder_multiplier" name="reorder_multiplier" type="number" min="0" step="0.05" value="{{ '%.2f'|format(procurement_options.reorder_multiplier) }}" />
+          </div>
+          <div>
+            <label for="default_lead_time_days">Standard-Lieferzeit (Tage)</label>
+            <input id="default_lead_time_days" name="default_lead_time_days" type="number" min="0" value="{{ procurement_options.default_lead_time_days }}" />
+          </div>
+          <div>
+            <label for="expedite_high_priority_days">Expressverkürzung für hohe Priorität (Tage)</label>
+            <input id="expedite_high_priority_days" name="expedite_high_priority_days" type="number" min="0" value="{{ procurement_options.expedite_high_priority_days }}" />
+          </div>
+        </div>
+        <label class="checkbox-inline" style="margin-top: 0.75rem;">
+          <input type="checkbox" name="include_safety_stock" {% if procurement_options.include_safety_stock_gap %}checked{% endif %} />
+          <span>Sicherheitsbestand bei Bedarfsermittlung berücksichtigen</span>
+        </label>
+        <label class="checkbox-inline" style="margin-top: 0.35rem;">
+          <input type="checkbox" name="auto_create_orders" {% if procurement_options.auto_create_orders %}checked{% endif %} />
+          <span>Bestellungen automatisch anlegen</span>
+        </label>
+        <div style="margin-top: 1rem;">
+          <button type="submit">Einstellungen speichern</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Bedarf planen</h2>
+      {% set form_order = selected_order_id if selected_order_id else (orders[0].id if orders else '') %}
+      <form method="post" action="/procurement/order/{{ form_order }}/plan">
+        <label for="procurement_order">Auftrag</label>
+        <select id="procurement_order" name="order_id" onchange="this.form.action='/procurement/order/'+this.value+'/plan'">
+          {% for order in orders %}
+            <option value="{{ order.id }}" {% if order.id == selected_order_id %}selected{% endif %}>{{ order.reference }} – fällig {{ order.due_date.strftime('%d.%m.%Y') }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-grid" style="margin-top: 1rem;">
+          <div>
+            <label for="override_multiplier">Multiplikator überschreiben</label>
+            <input id="override_multiplier" name="reorder_multiplier" type="number" min="0" step="0.05" placeholder="{{ '%.2f'|format(procurement_options.reorder_multiplier) }}" />
+          </div>
+          <div>
+            <label for="override_expedite">Expressverkürzung (Tage)</label>
+            <input id="override_expedite" name="expedite_high_priority_days" type="number" min="0" placeholder="{{ procurement_options.expedite_high_priority_days }}" />
+          </div>
+        </div>
+        <div class="form-grid" style="margin-top: 1rem;">
+          <div>
+            <label for="override_safety">Sicherheitsbestand</label>
+            <select id="override_safety" name="include_safety_stock_override">
+              <option value="inherit">Globale Einstellung ({{ 'berücksichtigt' if procurement_options.include_safety_stock_gap else 'ignoriert' }})</option>
+              <option value="yes">Berücksichtigen</option>
+              <option value="no">Ignorieren</option>
+            </select>
+          </div>
+          <div>
+            <label for="override_auto_create">Bestellungen</label>
+            <select id="override_auto_create" name="auto_create_override">
+              <option value="inherit">Globale Einstellung ({{ 'automatisch' if procurement_options.auto_create_orders else 'geplant' }})</option>
+              <option value="yes">Sofort anlegen</option>
+              <option value="no">Nur Vorschläge</option>
+            </select>
+          </div>
+        </div>
+        <p class="muted" style="margin-top: 0.5rem;">Leere Felder übernehmen automatisch die aktuellen Grundeinstellungen.</p>
+        <div style="margin-top: 1rem;">
+          <button type="submit" {% if not orders %}disabled{% endif %}>Bedarf planen</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 2rem;">
+    <h2>Materialbedarf</h2>
+    {% if selected_order %}
+      <p class="muted">Auftrag {{ selected_order.reference }} – Fälligkeit {{ selected_order.due_date.strftime('%d.%m.%Y') }}.</p>
+    {% endif %}
+    <table>
+      <thead>
+        <tr>
+          <th>Material</th>
+          <th>Bedarf</th>
+          <th>Prognose Bestand</th>
+          <th>Sicherheitslücke</th>
+          <th>Empfehlung</th>
+          <th>Lieferant</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for shortage in shortages %}
+          {% set item = inventory | selectattr('id', 'equalto', shortage.item_id) | first %}
+          <tr>
+            <td>{{ shortage.name or (item.name if item else shortage.item_id) }}</td>
+            <td>{{ '%.1f'|format(shortage.required_quantity) }}</td>
+            <td>{{ '%.1f'|format(shortage.projected_on_hand) }}</td>
+            <td>{{ '%.1f'|format(shortage.shortage) }}</td>
+            <td>{{ '%.1f'|format(shortage.reorder_recommendation) }}</td>
+            <td>{{ shortage.recommended_supplier_name or '—' }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="6" class="muted">Für den ausgewählten Auftrag bestehen aktuell keine Engpässe.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Offene Bestellungen</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Lieferant</th>
+          <th>Artikel</th>
+          <th>Menge</th>
+          <th>Liefertermin</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for po in purchase_orders %}
+          {% set item = inventory | selectattr('id', 'equalto', po.item_id) | first %}
+          <tr>
+            <td>{{ po.supplier_name or po.supplier_id }}</td>
+            <td>{{ item.name if item else po.item_id }}</td>
+            <td>{{ '%.1f'|format(po.quantity) }}</td>
+            <td>{{ po.expected_receipt.strftime('%d.%m.%Y') }}</td>
+            <td>{{ po.status }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="5" class="muted">Keine Bestellungen vorhanden.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

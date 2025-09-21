@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Lieferanten{% endblock %}
+
+{% block content %}
+  <div class="grid" style="margin-bottom: 2rem;">
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>Lieferantenübersicht</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Kontakt</th>
+            <th>Bewertung</th>
+            <th>Materialien</th>
+            <th>Fähigkeiten</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for supplier in suppliers %}
+            <tr>
+              <td>
+                <strong>{{ supplier.name }}</strong><br />
+                <span class="muted">{{ supplier.address }}</span>
+              </td>
+              <td>
+                {{ supplier.contact_person }}<br />
+                <span class="muted">{{ supplier.contact_email }}{% if supplier.contact_phone %} · {{ supplier.contact_phone }}{% endif %}</span>
+              </td>
+              <td>
+                {{ "%.2f"|format(supplier.rating) }} Punkte<br />
+                <span class="muted">{{ supplier.rating_count }} Bewertung(en)</span>
+              </td>
+              <td>
+                {% for item_id in supplier.material_item_ids %}
+                  {% set item = inventory | selectattr("id", "equalto", item_id) | first %}
+                  <span class="tag">{{ item.name if item else item_id }}</span>
+                {% else %}
+                  <span class="muted">Keine Zuordnung</span>
+                {% endfor %}
+              </td>
+              <td>
+                {% for process in supplier.process_capabilities %}
+                  <span class="tag">{{ process.value }}</span>
+                {% else %}
+                  <span class="muted">keine Angaben</span>
+                {% endfor %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="5" class="muted">Noch keine Lieferanten angelegt.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-bottom: 2rem;">
+    <div class="card">
+      <h2>Neuen Lieferanten anlegen</h2>
+      <form method="post" action="/suppliers">
+        <div class="form-grid">
+          <div>
+            <label for="name">Name</label>
+            <input id="name" name="name" required />
+          </div>
+          <div>
+            <label for="address">Adresse</label>
+            <input id="address" name="address" required />
+          </div>
+          <div>
+            <label for="contact_person">Ansprechpartner</label>
+            <input id="contact_person" name="contact_person" />
+          </div>
+          <div>
+            <label for="contact_email">E-Mail</label>
+            <input id="contact_email" name="contact_email" type="email" />
+          </div>
+          <div>
+            <label for="contact_phone">Telefon</label>
+            <input id="contact_phone" name="contact_phone" />
+          </div>
+        </div>
+        <label for="process_capabilities">Fertigungsverfahren (Komma getrennt, z. B. Drehen, Fräsen)</label>
+        <input id="process_capabilities" name="process_capabilities" />
+        <label for="material_item_ids">Material-IDs (Komma getrennt)</label>
+        <input id="material_item_ids" name="material_item_ids" placeholder="{{ inventory | map(attribute='id') | list | join(', ') }}" />
+        <div style="margin-top: 1rem;">
+          <button type="submit">Speichern</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Lieferanten bewerten</h2>
+      <form method="post" action="{% if default_supplier_id %}/suppliers/{{ default_supplier_id }}/evaluation{% else %}#{% endif %}">
+        <label for="supplier_select">Lieferant</label>
+        <select id="supplier_select" name="supplier_id" onchange="this.form.action='/suppliers/'+this.value+'/evaluation'">
+          {% for supplier in suppliers %}
+            <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-grid" style="margin-top: 1rem;">
+          <div>
+            <label for="quality_score">Qualität</label>
+            <input id="quality_score" name="quality_score" type="number" min="0" max="5" step="0.1" required />
+          </div>
+          <div>
+            <label for="delivery_reliability_score">Termintreue</label>
+            <input id="delivery_reliability_score" name="delivery_reliability_score" type="number" min="0" max="5" step="0.1" required />
+          </div>
+          <div>
+            <label for="communication_score">Kommunikation</label>
+            <input id="communication_score" name="communication_score" type="number" min="0" max="5" step="0.1" required />
+          </div>
+          <div>
+            <label for="evaluated_on">Bewertungsdatum</label>
+            <input id="evaluated_on" name="evaluated_on" type="date" />
+          </div>
+        </div>
+        <label for="notes">Bemerkungen</label>
+        <textarea id="notes" name="notes"></textarea>
+        <div style="margin-top: 1rem;">
+          <button type="submit">Bewertung speichern</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Material zuordnen</h2>
+      <form method="post" action="{% if default_supplier_id %}/suppliers/{{ default_supplier_id }}/materials{% else %}#{% endif %}">
+        <label for="material_supplier">Lieferant</label>
+        <select id="material_supplier" name="supplier_id" onchange="this.form.action='/suppliers/'+this.value+'/materials'">
+          {% for supplier in suppliers %}
+            <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+          {% endfor %}
+        </select>
+        <label for="item_id">Material</label>
+        <select id="item_id" name="item_id">
+          {% for item in inventory %}
+            <option value="{{ item.id }}">{{ item.name }} ({{ item.id[:8] }})</option>
+          {% endfor %}
+        </select>
+        <div style="margin-top: 1rem;">
+          <button type="submit">Zuordnen</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Bewertungshistorie</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Lieferant</th>
+          <th>Qualität</th>
+          <th>Termintreue</th>
+          <th>Kommunikation</th>
+          <th>Gesamt</th>
+          <th>Notiz</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for evaluation in evaluations %}
+          {% set supplier = suppliers | selectattr("id", "equalto", evaluation.supplier_id) | first %}
+          <tr>
+            <td>{{ evaluation.evaluated_on.strftime("%d.%m.%Y") }}</td>
+            <td>{{ supplier.name if supplier else evaluation.supplier_id }}</td>
+            <td>{{ "%.1f"|format(evaluation.quality_score) }}</td>
+            <td>{{ "%.1f"|format(evaluation.delivery_reliability_score) }}</td>
+            <td>{{ "%.1f"|format(evaluation.communication_score) }}</td>
+            <td>{{ "%.2f"|format(evaluation.overall_score) }}</td>
+            <td>{{ evaluation.notes }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="7" class="muted">Noch keine Bewertungen erfasst.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
